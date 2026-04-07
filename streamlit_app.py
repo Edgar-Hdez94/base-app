@@ -2,145 +2,154 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from io import BytesIO
+ 
 
-st.set_page_config(page_title="Feeder Analysis App", layout="wide")
-
-st.title("Feeder Reliability Analysis")
-st.write("Sube un archivo Excel o CSV con datos de outages para analizar circuitos por subestación + feeder.")
-
-uploaded_file = st.file_uploader("Upload Excel or CSV file", type=["xlsx", "csv"])
+st.set_page_config(page_title="Feeder Analysis", layout="wide")
+st.title("Feeder Reliability Analysis Dashboard")
+uploaded_file = st.file_uploader("Upload a file Excel o CSV", type=["xlsx", "csv"])
 
 def load_file(file):
-    if file.name.endswith(".xlsx"):
-        return pd.read_excel(file)
-    elif file.name.endswith(".csv"):
-        return pd.read_csv(file)
-    return None
-
-def clean_columns(df):
-    df.columns = [str(col).strip() for col in df.columns]
-    return df
+    if file.name.endswith(".xlsx"):
+        return pd.read_excel(file)
+    return pd.read_csv(file)
 
 def export_excel(dataframe):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        dataframe.to_excel(writer, index=False, sheet_name="Resumen")
-    return output.getvalue()
-
-
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        dataframe.to_excel(writer, index=False)
+    return output.getvalue()
 if uploaded_file is not None:
-    try:
-        df = load_file(uploaded_file)
-        df = clean_columns(df)
+    df = load_file(uploaded_file)
+    df.columns = [str(col).strip() for col in df.columns]
+    st.subheader("Preview of data")
+    st.dataframe(df.head())
 
-        st.subheader("Preview of uploaded data")
-        st.dataframe(df.head())
+    # Validación
+    required = ["Substation", "Feeder", "Outage #", "SAIDI", "Customers Out"]
+    missing = [c for c in required if c not in df.columns]
 
-        required_cols = ["Substation", "Feeder", "Outage #", "SAIDI", "Customers Out", "Duration"]
+    if missing:
+        st.error(f"Faltan columnas: {missing}")
+        st.stop()
 
+    # Convertir a numérico
+    for col in ["Substation", "Feeder", "SAIDI", "Customers Out"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["Substation", "Feeder"])
 
-        missing = [col for col in required_cols if col not in df.columns]
+    # Filtro por causa
+    if "Cause" in df.columns:
+        causas = ["Todas"] + list(df["Cause"].dropna().unique())
+        seleccion = st.sidebar.selectbox("Filter by cause", causas)
 
+        if seleccion != "Todas":
+            df = df[df["Cause"] == seleccion]
 
-        if missing:
-            st.error(f"Faltan columnas requeridas: {missing}")
-            st.stop()
+    # Agrupación
+    resumen = df.groupby(["Substation", "Feeder"]).agg({
+        "Outage #": "count",
+        "SAIDI": "sum",
+        "Customers Out": "sum"
+    }).reset_index()
 
+    resumen = resumen.rename(columns={
+        "Outage #": "faults",
+        "Customers Out": "affected_customers"
+    })
 
-        resumen = df.groupby(["Substation", "Feeder"]).agg({
-            "Outage #": "count",
-            "SAIDI": "sum",
-            "Customers Out": "sum",
-            "Duration": "mean"
-        }).reset_index()
+    resumen["feeder"] = (
+        resumen["Substation"].astype(int).astype(str) +
+        "-" +
+        resumen["Feeder"].astype(int).astype(str)
+    )
 
+    # KPI
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Feeders", len(resumen))
+    col2.metric("Faults", int(resumen["faults"].sum()))
+    col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
+    col4.metric("Affected Customers", int(resumen["affected_customers"].sum()))
 
-        resumen = resumen.rename(columns={
-            "Outage #": "fallas",
-            "Customers Out": "clientes_afectados",
-            "Duration": "duracion_promedio"
-        })
+    # Clustering
+    X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
+    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+    resumen["group"] = kmeans.fit_predict(X)
 
+    # Riesgo
+    resumen["risk"] = (
+        resumen["SAIDI"] * 0.5 +
+        resumen["faults"] * 0.3 +
+        resumen["affected_customers"] * 0.2
+    )
 
-        resumen["circuito"] = resumen["Substation"].astype(str) + "-" + resumen["Feeder"].astype(str)
+    # Layout
+    col_g1, col_g2 = st.columns(2)
 
- 
-        X = resumen[["SAIDI", "fallas", "clientes_afectados"]].fillna(0)
+    # Gráfico barras
+    with col_g1:
+        st.subheader("Top 10 feeders (SAIDI)")
+        top = resumen.sort_values(by="SAIDI", ascending=False).head(10)
+        fig1, ax1 = plt.subplots()
+        ax1.bar(top["feeder"], top["SAIDI"])
+        plt.xticks(rotation=45)
+        st.pyplot(fig1)
 
- 
-        n_clusters = st.sidebar.slider("Número de clusters", 2, 6, 3)
+    # Scatter clustering
+    with col_g2:
+        st.subheader("Clustering of feeders")
+        fig2, ax2 = plt.subplots()
+        scatter = ax2.scatter(resumen["SAIDI"], resumen["faults"], c=resumen["group"])
 
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        resumen["grupo"] = kmeans.fit_predict(X)
+        for i in range(len(resumen)):
+            ax2.text(
+                resumen["SAIDI"].iloc[i],
+                resumen["faults"].iloc[i],
+                resumen["feeder"].iloc[i],
+                fontsize=7
+            )
 
-        st.subheader("Resumen por circuito")
-        st.dataframe(resumen)
+        ax2.set_xlabel("SAIDI")
+        ax2.set_ylabel("Faults")
+        st.pyplot(fig2)
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total circuitos", len(resumen))
-        col2.metric("Total fallas", int(resumen["fallas"].sum()))
-        col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
-        col4.metric("Clientes afectados", int(resumen["clientes_afectados"].sum()))
+    # Ranking
+    st.subheader("Feeders more critical")
+    top_riesgo = resumen.sort_values(by="risk", ascending=False).head(10)
+    st.dataframe(top_riesgo)
 
-        st.subheader("Top circuitos por SAIDI")
-        top_saidi = resumen.sort_values(by="SAIDI", ascending=False).head(10)
+    # Modelo predictivo
+    st.subheader("Pedictive Model")
+    resumen["critical"] = ((resumen["faults"] > 10) | (resumen["SAIDI"] > 100)).astype(int)
+    X = resumen[["SAIDI", "faults", "affected_customers"]]
+    y = resumen["critical"]
 
+    if len(resumen) > 5:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+        model = RandomForestClassifier()
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+        acc = accuracy_score(y_test, pred)
+        st.write("Accuracy:", round(acc, 2))
+        resumen["prediction"] = model.predict(X)
 
-        fig1, ax1 = plt.subplots(figsize=(10, 5))
-        ax1.bar(top_saidi["circuito"], top_saidi["SAIDI"])
-        ax1.set_title("Top 10 circuitos con mayor SAIDI")
-        ax1.set_xlabel("Circuito")
-        ax1.set_ylabel("SAIDI")
-        plt.xticks(rotation=45)
-        st.pyplot(fig1)
+        st.dataframe(resumen[[
+            "feeder", "faults", "SAIDI",
+            "affected_customers", "prediction"
+        ]])
 
-        st.subheader("Clustering de circuitos")
-        fig2, ax2 = plt.subplots(figsize=(8, 6))
-        scatter = ax2.scatter(resumen["SAIDI"], resumen["fallas"], c=resumen["grupo"])
-        ax2.set_xlabel("SAIDI")
-        ax2.set_ylabel("Fallas")
-        ax2.set_title("Clustering por circuito")
+    # Exportar
+    excel = export_excel(resumen)
 
-        for i in range(len(resumen)):
-            ax2.text(
-                resumen["SAIDI"].iloc[i],
-                resumen["fallas"].iloc[i],
-                resumen["circuito"].iloc[i],
-                fontsize=8
-            )
-
-        st.pyplot(fig2)
-
-
-        st.subheader("Filtros")
-        substation_filter = st.multiselect(
-            "Selecciona subestación",
-            options=sorted(resumen["Substation"].astype(str).unique())
-        )
-
-
-        filtered = resumen.copy()
-        if substation_filter:
-            filtered = filtered[filtered["Substation"].astype(str).isin(substation_filter)]
-
-
-        st.subheader("Tabla filtrada")
-        st.dataframe(filtered.sort_values(by="SAIDI", ascending=False))
-
-        excel_data = export_excel(filtered)
-        st.download_button(
-            label="Descargar resumen en Excel",
-            data=excel_data,
-            file_name="resumen_circuitos.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-
-    except Exception as e:
-        st.error(f"Error al procesar archivo: {e}")
-
+    st.download_button(
+        "Download Excel",
+        excel,
+        file_name="Feeders_analysis.xlsx"
+    )
 
 else:
-    st.info("Sube un archivo para comenzar.")
-)
+    st.info("Upload a file to start")
+
