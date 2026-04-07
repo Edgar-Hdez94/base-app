@@ -73,12 +73,12 @@ if uploaded_file is not None:
     col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
     col4.metric("Affected Customers", int(resumen["affected_customers"].sum()))
 
-  # Clustering
+    # Clustering
     X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
     kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
     resumen["group"] = kmeans.fit_predict(X)
 
-  # Riesgo
+    # Riesgo
     resumen["risk"] = (
     resumen["SAIDI"] * 0.5 +
     resumen["faults"] * 0.3 +
