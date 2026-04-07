@@ -65,21 +65,21 @@ if uploaded_file is not None:
         resumen["Substation"].astype(int).astype(str) + 
         "-" + 
         resumen["Feeder"].astype(int).astype(str)
-  )
-  # KPI
-  col1, col2, col3, col4 = st.columns(4)
-  col1.metric("Feeders", len(resumen))
-  col2.metric("Faults", int(resumen["faults"].sum()))
-  col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
-  col4.metric("Affected Customers", int(resumen["affected_customers"].sum()))
+    )
+    # KPI
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Feeders", len(resumen))
+    col2.metric("Faults", int(resumen["faults"].sum()))
+    col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
+    col4.metric("Affected Customers", int(resumen["affected_customers"].sum()))
 
   # Clustering
-   X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
+  X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
   kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
   resumen["group"] = kmeans.fit_predict(X)
 
   # Riesgo
-  resumen["risk"] = (
+    resumen["risk"] = (
     resumen["SAIDI"] * 0.5 +
     resumen["faults"] * 0.3 +
     resumen["affected_customers"] * 0.2
