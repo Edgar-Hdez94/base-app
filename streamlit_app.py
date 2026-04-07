@@ -39,7 +39,7 @@ if uploaded_file is not None:
     for col in ["Substation", "Feeder", "SAIDI", "Customers Out"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna(subset=["Substation", "Feeder"])
-    
+
     # Filtro por causa
     if "Cause" in df.columns:
         causas = ["Todas"] + list(df["Cause"].dropna().unique())
@@ -47,8 +47,8 @@ if uploaded_file is not None:
 
         if seleccion != "Todas":
             df = df[df["Cause"] == seleccion]
-
-    # Agrupación
+            
+        # Agrupación
             resumen = df.groupby(["Substation", "Feeder"]).agg({
                 "Outage #": "count",
                 "SAIDI": "sum",
@@ -60,95 +60,94 @@ if uploaded_file is not None:
         "Customers Out": "affected_customers"
     })
 
-    resumen["feeder"] = (
-        resumen["Substation"].astype(int).astype(str) +
-        "-" +
-        resumen["Feeder"].astype(int).astype(str)
-    )
+    resumen["feeder"] = (
+        resumen["Substation"].astype(int).astype(str) + 
+        "-" + 
+        resumen["Feeder"].astype(int).astype(str)
+  )
+  # KPI
+  col1, col2, col3, col4 = st.columns(4)
+  col1.metric("Feeders", len(resumen))
+  col2.metric("Faults", int(resumen["faults"].sum()))
+  col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
+  col4.metric("Affected Customers", int(resumen["affected_customers"].sum()))
 
-    # KPI
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Feeders", len(resumen))
-    col2.metric("Faults", int(resumen["faults"].sum()))
-    col3.metric("SAIDI total", round(resumen["SAIDI"].sum(), 2))
-    col4.metric("Affected Customers", int(resumen["affected_customers"].sum()))
+  # Clustering
+   X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
+  kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+  resumen["group"] = kmeans.fit_predict(X)
 
-    # Clustering
-    X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
-    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    resumen["group"] = kmeans.fit_predict(X)
+  # Riesgo
+  resumen["risk"] = (
+    resumen["SAIDI"] * 0.5 +
+    resumen["faults"] * 0.3 +
+    resumen["affected_customers"] * 0.2
+  )
 
-    # Riesgo
-    resumen["risk"] = (
-        resumen["SAIDI"] * 0.5 +
-        resumen["faults"] * 0.3 +
-        resumen["affected_customers"] * 0.2
-    )
+  # Layout
+  col_g1, col_g2 = st.columns(2)
 
-    # Layout
-    col_g1, col_g2 = st.columns(2)
+  # Gráfico barras
+  with col_g1:
+     st.subheader("Top 10 feeders (SAIDI)")
+    top = resumen.sort_values(by="SAIDI", ascending=False).head(10)
+    fig1, ax1 = plt.subplots()
+    ax1.bar(top["feeder"], top["SAIDI"])
+     plt.xticks(rotation=45)
+     st.pyplot(fig1)
 
-    # Gráfico barras
-    with col_g1:
-        st.subheader("Top 10 feeders (SAIDI)")
-        top = resumen.sort_values(by="SAIDI", ascending=False).head(10)
-        fig1, ax1 = plt.subplots()
-        ax1.bar(top["feeder"], top["SAIDI"])
-        plt.xticks(rotation=45)
-        st.pyplot(fig1)
+  # Scatter clustering
+  with col_g2:
+     st.subheader("Clustering of feeders")
+    fig2, ax2 = plt.subplots()
+    scatter = ax2.scatter(resumen["SAIDI"], resumen["faults"], c=resumen["group"])
 
-    # Scatter clustering
-    with col_g2:
-        st.subheader("Clustering of feeders")
-        fig2, ax2 = plt.subplots()
-        scatter = ax2.scatter(resumen["SAIDI"], resumen["faults"], c=resumen["group"])
+    for i in range(len(resumen)):
+      ax2.text(
+        resumen["SAIDI"].iloc[i],
+        resumen["faults"].iloc[i],
+        resumen["feeder"].iloc[i],
+        fontsize=7
+      )
 
-        for i in range(len(resumen)):
-            ax2.text(
-                resumen["SAIDI"].iloc[i],
-                resumen["faults"].iloc[i],
-                resumen["feeder"].iloc[i],
-                fontsize=7
-            )
+    ax2.set_xlabel("SAIDI")
+    ax2.set_ylabel("Faults")
+     st.pyplot(fig2)
 
-        ax2.set_xlabel("SAIDI")
-        ax2.set_ylabel("Faults")
-        st.pyplot(fig2)
+  # Ranking
+   st.subheader("Feeders more critical")
+  top_riesgo = resumen.sort_values(by="risk", ascending=False).head(10)
+   st.dataframe(top_riesgo)
 
-    # Ranking
-    st.subheader("Feeders more critical")
-    top_riesgo = resumen.sort_values(by="risk", ascending=False).head(10)
-    st.dataframe(top_riesgo)
+  # Modelo predictivo
+   st.subheader("Pedictive Model")
+  resumen["critical"] = ((resumen["faults"] > 10) | (resumen["SAIDI"] > 100)).astype(int)
+   X = resumen[["SAIDI", "faults", "affected_customers"]]
+  y = resumen["critical"]
 
-    # Modelo predictivo
-    st.subheader("Pedictive Model")
-    resumen["critical"] = ((resumen["faults"] > 10) | (resumen["SAIDI"] > 100)).astype(int)
-    X = resumen[["SAIDI", "faults", "affected_customers"]]
-    y = resumen["critical"]
+  if len(resumen) > 5:
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    model = RandomForestClassifier()
+    model.fit(X_train, y_train)
+    pred = model.predict(X_test)
+    acc = accuracy_score(y_test, pred)
+     st.write("Accuracy:", round(acc, 2))
+    resumen["prediction"] = model.predict(X)
 
-    if len(resumen) > 5:
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-        model = RandomForestClassifier()
-        model.fit(X_train, y_train)
-        pred = model.predict(X_test)
-        acc = accuracy_score(y_test, pred)
-        st.write("Accuracy:", round(acc, 2))
-        resumen["prediction"] = model.predict(X)
+     st.dataframe(resumen[[
+      "feeder", "faults", "SAIDI",
+      "affected_customers", "prediction"
+    ]])
 
-        st.dataframe(resumen[[
-            "feeder", "faults", "SAIDI",
-            "affected_customers", "prediction"
-        ]])
+  # Exportar
+  excel = export_excel(resumen)
 
-    # Exportar
-    excel = export_excel(resumen)
-
-    st.download_button(
-        "Download Excel",
-        excel,
-        file_name="Feeders_analysis.xlsx"
-    )
+   st.download_button(
+    "Download Excel",
+    excel,
+    file_name="Feeders_analysis.xlsx"
+  )
 
 else:
-    st.info("Upload a file to start")
+   st.info("Upload a file to start")
 
