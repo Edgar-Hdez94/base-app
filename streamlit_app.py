@@ -14,18 +14,18 @@ uploaded_file = st.file_uploader("Upload a file Excel o CSV", type=["xlsx", "csv
 def load_file(file):
     if file.name.endswith(".xlsx"):
         return pd.read_excel(file)
-    return pd.read_csv(file)
+    return pd.read_csv(file)
 
 def export_excel(dataframe):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        dataframe.to_excel(writer, index=False)
-    return output.getvalue()
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    dataframe.to_excel(writer, index=False)
+    return output.getvalue()
 if uploaded_file is not None:
-    df = load_file(uploaded_file)
-    df.columns = [str(col).strip() for col in df.columns]
-    st.subheader("Preview of data")
-    st.dataframe(df.head())
+    df = load_file(uploaded_file)
+    df.columns = [str(col).strip() for col in df.columns]
+    st.subheader("Preview of data")
+    st.dataframe(df.head())
 
     # Validación
     required = ["Substation", "Feeder", "Outage #", "SAIDI", "Customers Out"]
