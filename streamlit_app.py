@@ -19,8 +19,9 @@ def load_file(file):
 def export_excel(dataframe):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    dataframe.to_excel(writer, index=False)
+        dataframe.to_excel(writer, index=False)
     return output.getvalue()
+
 if uploaded_file is not None:
     df = load_file(uploaded_file)
     df.columns = [str(col).strip() for col in df.columns]
