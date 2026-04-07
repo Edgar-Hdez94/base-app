@@ -12,7 +12,7 @@ st.write("Sube un archivo Excel o CSV con datos de outages para analizar circuit
 uploaded_file = st.file_uploader("Upload Excel or CSV file", type=["xlsx", "csv"])
 
 def load_file(file):
-    if file.name.endswith(".xlsx"):
+    if file.name.endswith(".excel"):
         return pd.read_excel(file)
     elif file.name.endswith(".csv"):
         return pd.read_csv(file)
