@@ -27,7 +27,7 @@ if uploaded_file is not None:
     st.subheader("Preview of data")
     st.dataframe(df.head())
 
-    # Validación
+    # Validación
     required = ["Substation", "Feeder", "Outage #", "SAIDI", "Customers Out"]
     missing = [c for c in required if c not in df.columns]
 
