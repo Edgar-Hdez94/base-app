@@ -12,8 +12,8 @@ st.title("Feeder Reliability Analysis Dashboard")
 uploaded_file = st.file_uploader("Upload a file Excel o CSV", type=["xlsx", "csv"])
 
 def load_file(file):
-    if file.name.endswith(".xlsx"):
-        return pd.read_excel(file)
+    if file.name.endswith(".xlsx"):
+        return pd.read_excel(file)
     return pd.read_csv(file)
 
 def export_excel(dataframe):
