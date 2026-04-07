@@ -75,9 +75,7 @@ if uploaded_file is not None:
 
     # Clustering
     X = resumen[["SAIDI", "faults", "affected_customers"]].fillna(0)
-
     kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    
     resumen["group"] = kmeans.fit_predict(X)
 
     # Riesgo
