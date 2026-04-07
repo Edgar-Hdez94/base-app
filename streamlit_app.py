@@ -28,37 +28,37 @@ if uploaded_file is not None:
     st.dataframe(df.head())
 
     # Validación
-    required = ["Substation", "Feeder", "Outage #", "SAIDI", "Customers Out"]
-    missing = [c for c in required if c not in df.columns]
+    required = ["Substation", "Feeder", "Outage #", "SAIDI", "Customers Out"]
+    missing = [c for c in required if c not in df.columns]
 
-    if missing:
-        st.error(f"Faltan columnas: {missing}")
+    if missing:
+        st.error(f"Faltan columnas: {missing}")
         st.stop()
 
     # Convertir a numérico
-    for col in ["Substation", "Feeder", "SAIDI", "Customers Out"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna(subset=["Substation", "Feeder"])
+    for col in ["Substation", "Feeder", "SAIDI", "Customers Out"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["Substation", "Feeder"])
 
     # Filtro por causa
-    if "Cause" in df.columns:
-        causas = ["Todas"] + list(df["Cause"].dropna().unique())
-        seleccion = st.sidebar.selectbox("Filter by cause", causas)
+    if "Cause" in df.columns:
+        causas = ["Todas"] + list(df["Cause"].dropna().unique())
+        seleccion = st.sidebar.selectbox("Filter by cause", causas)
 
-        if seleccion != "Todas":
-            df = df[df["Cause"] == seleccion]
+        if seleccion != "Todas":
+            df = df[df["Cause"] == seleccion]
 
     # Agrupación
-    resumen = df.groupby(["Substation", "Feeder"]).agg({
-        "Outage #": "count",
-        "SAIDI": "sum",
-        "Customers Out": "sum"
-    }).reset_index()
+            resumen = df.groupby(["Substation", "Feeder"]).agg({
+                "Outage #": "count",
+                "SAIDI": "sum",
+                "Customers Out": "sum"
+            }).reset_index()
 
-    resumen = resumen.rename(columns={
-        "Outage #": "faults",
-        "Customers Out": "affected_customers"
-    })
+    resumen = resumen.rename(columns={
+        "Outage #": "faults",
+        "Customers Out": "affected_customers"
+    })
 
     resumen["feeder"] = (
         resumen["Substation"].astype(int).astype(str) +
