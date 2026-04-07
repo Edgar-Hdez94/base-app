@@ -32,15 +32,15 @@ if uploaded_file is not None:
     missing = [c for c in required if c not in df.columns]
 
     if missing:
-        st.error(f"Faltan columnas: {missing}")
-        st.stop()
+        st.error(f"Faltan columnas: {missing}")
+        st.stop()
 
-    # Convertir a numérico
+    # Convertir a numérico
     for col in ["Substation", "Feeder", "SAIDI", "Customers Out"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna(subset=["Substation", "Feeder"])
-
-    # Filtro por causa
+    
+    # Filtro por causa
     if "Cause" in df.columns:
         causas = ["Todas"] + list(df["Cause"].dropna().unique())
         seleccion = st.sidebar.selectbox("Filter by cause", causas)
