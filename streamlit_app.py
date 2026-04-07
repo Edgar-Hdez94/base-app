@@ -83,7 +83,7 @@ if uploaded_file is not None:
     resumen["SAIDI"] * 0.5 +
     resumen["faults"] * 0.3 +
     resumen["affected_customers"] * 0.2
-  )
+    )
 
   # Layout
   col_g1, col_g2 = st.columns(2)
